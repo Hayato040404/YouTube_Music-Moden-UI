@@ -148,10 +148,11 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                         : (Array.isArray(line.chars) ? line.chars.map(c => c.c).join('') : '');
 
                     text = (text || '').trim();
-                    if (!text) return null;
 
                     const timeSec = ms / 1000;
-                    return `[${formatLrcTime(timeSec)}] ${text}`;
+                    const timeTag = `[${formatLrcTime(timeSec)}]`;
+                    // ★ 文字がなくても timeTag だけの行として残す
+                    return text ? `${timeTag} ${text}` : timeTag;
                 }).filter(Boolean);
 
                 const lrc = lrcLines.join('\n');
@@ -178,7 +179,6 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
             .then(text => {
                 if (!text) return '';
 
-                // ``` ～ ``` の中に LRC がある想定（なければ全文から探す）
                 let candidate = '';
                 const fenceMatch = text.match(/```(?:lrc|text)?([\s\S]*?)```/i);
                 if (fenceMatch && fenceMatch[1]) {
@@ -187,7 +187,6 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                     candidate = text;
                 }
 
-                // LRC っぽいタグがなければ無視
                 if (!/\[\d{2}:\d{2}\.\d{2,3}\]/.test(candidate)) {
                     return '';
                 }
@@ -236,7 +235,6 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
             });
         };
 
-        // ★ まず DynamicLyrics.json を試す
         const startPromise = video_id
             ? fetchFromGithubDynamic(video_id)
             : Promise.resolve(null);
@@ -250,13 +248,9 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                         lyrics: githubRes.lyrics,
                         dynamicLines: githubRes.dynamicLines || null
                     });
-                    // ここで終わり
                     return null;
                 }
 
-                // ★ DynamicLyrics.json が無かった場合：
-                //   1. README.md を読む
-                //   2. それもなければ LRCHub → LrcLib の順で従来通り
                 console.log('[BG] No DynamicLyrics, try README.md');
 
                 const readmePromise = video_id
@@ -282,14 +276,12 @@ chrome.runtime.onMessage.addListener((req, sender, sendResponse) => {
                 });
             })
             .then(finalRes => {
-                // DynamicLyrics ルートで sendResponse 済みなら何もしない
                 if (!finalRes) return;
 
                 const ok = !!(finalRes.lyrics && finalRes.lyrics.trim());
                 sendResponse({
                     success: ok,
                     lyrics: finalRes.lyrics || '',
-                    // README / LRCHub / LrcLib の場合は 1行単位表示（今まで通り）
                     dynamicLines: null
                 });
             })
