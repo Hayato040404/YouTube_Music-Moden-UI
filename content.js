@@ -783,31 +783,52 @@
         if (mainLangStored) config.mainLang = mainLangStored;
         if (subLangStored !== null && subLangStored !== undefined) config.subLang = subLangStored;
 
-        // キャッシュ読み込み
-        let cached = await storage.get(currentKey);
+        // この loadLyrics 呼び出し時点でのキーを固定しておく
+        const thisKey = `${meta.title}///${meta.artist}`;
+
+        // もし tick 側の currentKey と食い違っていたら何もしない
+        if (thisKey !== currentKey) return;
+
+        // ★ キャッシュ読み込み
+        let cached = await storage.get(thisKey);
         dynamicLines = null;
         let data = null;
+        let noLyricsCached = false;
 
-        if (cached) {
-            if (typeof cached === 'string') {
-                // 旧形式（歌詞だけ文字列） or ローカルアップロード
+        if (cached !== null && cached !== undefined) {
+            // ① 歌詞なしセンチネル
+            if (cached === NO_LYRICS_SENTINEL) {
+                noLyricsCached = true;
+            }
+            // ② 旧形式（文字列のみ）
+            else if (typeof cached === 'string') {
                 data = cached;
-                dynamicLines = null;
-            } else if (typeof cached === 'object') {
-                // 新形式 { lyrics, dynamicLines }
-                data = cached.lyrics || '';
+            }
+            // ③ 新形式 { lyrics, dynamicLines, noLyrics }
+            else if (typeof cached === 'object') {
+                if (typeof cached.lyrics === 'string') {
+                    data = cached.lyrics;
+                }
                 if (Array.isArray(cached.dynamicLines)) {
                     dynamicLines = cached.dynamicLines;
                 }
+                if (cached.noLyrics) {
+                    noLyricsCached = true;
+                }
             }
         }
-        // 非同期処理中に曲が変わった場合に備えて、現在の曲と一致するか確認するためのキー（実験的）
-        const thisKey = `${meta.title}///${meta.artist}`;
-        if (thisKey !== currentKey) return;
 
-        let data = await storage.get(currentKey);
+        // すでに「この曲は歌詞なし」と判定済み → API 叩かずそのまま空表示
+        if (!data && noLyricsCached) {
+            if (thisKey !== currentKey) return;
+            renderLyrics([]);
+            return;
+        }
 
-        if (!data) {
+        // ★ まだ一度も取得していない場合だけ API へ
+        if (!data && !noLyricsCached) {
+            let gotLyrics = false;
+
             try {
                 const track = meta.title.replace(/\s*[\(-\[].*?[\)-]].*/, "");
                 const artist = meta.artist;
@@ -823,28 +844,51 @@
 
                 console.log('[CS] GET_LYRICS response:', res);
 
-                if (res?.success) {
-                    data = res.lyrics || '';
-                    // 現在も同じ曲を表示している場合のみ保存
-                    if (data && thisKey === currentKey) {
-                        storage.set(currentKey, data);
+                if (res?.success && typeof res.lyrics === 'string' && res.lyrics.trim()) {
+                    data = res.lyrics;
+                    gotLyrics = true;
+
+                    if (Array.isArray(res.dynamicLines) && res.dynamicLines.length) {
+                        dynamicLines = res.dynamicLines;
+                    }
+
+                    // ★ まだ同じ曲を見ている場合だけキャッシュに保存
+                    if (thisKey === currentKey) {
+                        if (dynamicLines) {
+                            storage.set(thisKey, {
+                                lyrics: data,
+                                dynamicLines,
+                                noLyrics: false
+                            });
+                        } else {
+                            // 従来形式（互換性のため文字列だけ保存）
+                            storage.set(thisKey, data);
+                        }
                     }
                 } else {
-                    console.warn('Lyrics API failed:', res?.error);
+                    console.warn('Lyrics API returned no lyrics or success=false');
                 }
             } catch (e) {
                 console.warn('Lyrics API fetch failed', e);
             }
+
+            // 一度試したが歌詞が取れなかった → センチネルを保存
+            if (!gotLyrics && thisKey === currentKey) {
+                storage.set(thisKey, NO_LYRICS_SENTINEL);
+                noLyricsCached = true;
+            }
         }
 
-        
+        // 途中で曲が切り替わっていたら何もしない
         if (thisKey !== currentKey) return;
 
+        // ここまで来て data が無ければ「歌詞なし」を表示
         if (!data) {
             renderLyrics([]);
             return;
         }
 
+        // ここから先は従来通り：パース → 翻訳 → レンダリング
         let parsed = parseBaseLRC(data);
         const videoUrl = getCurrentVideoUrl();
         let finalLines = parsed;
@@ -853,13 +897,12 @@
             finalLines = await applyTranslations(parsed, videoUrl);
         }
 
-        
         if (thisKey !== currentKey) return;
 
         lyricsData = finalLines;
         renderLyrics(finalLines);
     }
-
+    
     function renderLyrics(data) {
         if (!ui.lyrics) return;
         ui.lyrics.innerHTML = '';
