@@ -10,6 +10,7 @@
     "https://music.youtube.com/*",
     "https://lrclib.net/*",
     "https://lrchub.coreone.work/*",
+    "http://lrchub.coreone.work/*",
     "https://api-free.deepl.com/*",
     "https://api.deepl.com/*"
   ],
@@ -27,7 +28,7 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "assets/fonts/InterVariable.woff2"
+        "src/assets/fonts/*.woff2"
       ],
       "matches": ["<all_urls>"]
     }

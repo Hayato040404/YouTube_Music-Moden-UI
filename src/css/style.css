@@ -1,15 +1,15 @@
 /* === フォント読み込み === */
 @font-face {
-  font-family: "Inter";
-  src: url("../assets/fonts/InterVariable.woff2") format("woff2");
+  font-family: "InterVariable";
+  src: url("chrome-extension://__MSG_@@extension_id__/src/assets/fonts/InterVariable.woff2") format("woff2");
   font-weight: 100 900;
-  font-stretch: 75% 125%;
+  font-style: normal;
   font-display: swap;
 }
 
 /* 全体のボックスサイズ計算を統一して、はみ出し事故を防ぐ */
 * {
-  font-family: 'SF Pro Display', 'Inter', 'Noto Sans JP';
+  font-family: 'SF Pro Display', 'InterVariable', 'Noto Sans JP';
   box-sizing: border-box;
 }
 
@@ -18,7 +18,7 @@
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
   background-size: cover; background-position: center center;
   z-index: 1000; background-color: #050505;
-  filter: blur(80px) brightness(0.5) saturate(140%);
+  filter: blur(80px) brightness(0.35) saturate(140%);
   transform: scale(1.1); pointer-events: none; display: none;
 }
 body.ytm-custom-layout #ytm-custom-bg { display: block !important; }
@@ -39,6 +39,17 @@ body.ytm-custom-layout #ytm-custom-bg { display: block !important; }
 body.ytm-custom-layout #ytm-custom-bg {
   display: block !important;
   animation: ytmBgDrift 40s ease-in-out infinite alternate;
+}
+
+/* Lyrics候補があるときのバウンド */
+@keyframes ytmLyricsBounce {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-2px); }
+  60% { transform: translateY(0); }
+}
+
+.ytm-glass-btn.lyrics-btn.ytm-lyrics-has-candidates {
+  animation: ytmLyricsBounce 1.2s ease-out 3;
 }
 
 /* === メインレイアウト === */
@@ -170,17 +181,21 @@ body.ytm-custom-layout ytmusic-search-box {
 }
 
 /* 歌詞エリア */
-#my-lyrics-container { width: 500px; height: 65vh; overflow-y: auto; scrollbar-width: none; mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent); }
+#my-lyrics-container { 
+  width: 500px; 
+  height: 65vh; 
+  overflow-y: auto; 
+  scrollbar-width: none; 
+  mask-image: linear-gradient(to bottom, transparent, black 15%, black 85%, transparent);
+  padding-top: 30vh;
+}
 #my-lyrics-container::-webkit-scrollbar { display: none; }
 
-/* ★ 修正ポイント: 
-   Flexboxをやめ、単純なブロック配置に変更。
-   これで幅計算が狂わず、確実に折り返されます。
-*/
+/* ★ 修正ポイント: Flexboxをやめ、単純なブロック配置に変更。 */
 .lyric-line {
   font-size: 32px;
   font-weight: 800;
-  letter-spacing: -0.05em;
+  letter-spacing: -0.03em;
   color: rgba(255,255,255,0.3);
   margin-bottom: 35px;
   cursor: pointer;
@@ -189,12 +204,10 @@ body.ytm-custom-layout ytmusic-search-box {
   filter: blur(1px);
   transform: scale(0.95);
   
-  /* Flexを廃止しBlockへ */
   display: block;
   width: 100%;
-  padding-right: 20px; /* 右側に余裕を持たせる */
+  padding-right: 20px;
   
-  /* 強制折り返しのための最強設定 */
   overflow-wrap: anywhere; 
   word-break: break-all;
   white-space: normal;
@@ -244,9 +257,9 @@ body.ytm-custom-layout.ytm-has-timestamp .lyric-line.show-translation .lyric-tra
     margin-top: 6px;
 }
 
-/* 1文字ずつ光るなんかよさげな演出 */
+/* 1文字ずつ光る演出 */
 body.ytm-custom-layout .lyric-line .lyric-char {
-    display: inline-block; /* アニメーションのためにinline-blockは維持 */
+    display: inline-block;
     transition:
         color 0.12s linear,
         transform 0.12s linear,
@@ -293,7 +306,7 @@ body.ytm-custom-layout .middle-controls {
     padding: 0 5px !important;
     display: flex !important;
     align-items: center !important;
-    gap: 10px !important;
+    gap: 10px !重要;
     overflow: visible !important;
 }
 
@@ -356,7 +369,6 @@ body.ytm-custom-layout ytmusic-player-bar .right-controls {
 body.ytm-custom-layout ytmusic-player-bar .right-controls #my-mode-toggle {
   order: 20;
 }
-
 
 body.ytm-custom-layout ytmusic-player-bar .right-controls
 ytmusic-toggle-button-renderer[aria-label*="音量"],
@@ -468,6 +480,28 @@ tp-yt-paper-icon-button[aria-label*="menu"] {
     opacity: 0.6;
 }
 
+/* Lyrics候補セクション */
+.ytm-upload-menu-candidates {
+    margin-top: 4px;
+    padding-top: 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+.ytm-upload-menu-subtitle {
+    font-size: 11px;
+    opacity: 0.7;
+    padding: 4px 10px 2px;
+}
+.ytm-upload-menu-candidate-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 180px;
+    overflow-y: auto;
+}
+.ytm-upload-menu-item-candidate {
+    font-size: 12px;
+}
+
 /* === 歌詞削除用ダイアログ === */
 .ytm-confirm-dialog {
     position: absolute;
@@ -554,11 +588,17 @@ body.ytm-custom-layout.ytm-no-timestamp .lyric-line {
     color: #fff;
     font-weight: 700;
     font-size: 18px;
-    opacity: 1 !important; /* 強制的に不透明 */
+    opacity: 1 !important;
     text-shadow: 0 4px 15px rgba(0,0,0,0.6);
 }
 .no-lyrics-message a {
     color: #3ea6ff;
     text-decoration: none;
     border-bottom: 1px solid rgba(62, 166, 255, 0.3);
+}
+
+/* issue #13 Fix */
+body.ytm-custom-layout ytmusic-popup-container,
+body.ytm-custom-layout ytmusic-popup-container tp-yt-iron-dropdown {
+    z-index: 3000 !important;
 }
